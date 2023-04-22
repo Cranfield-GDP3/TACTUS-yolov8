@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import cv2
+from tactus_data import Skeleton
 
 from ultralytics.nn.autobackend import AutoBackend
 from ultralytics.yolo.utils import downloads
@@ -120,15 +121,17 @@ class Yolov8:
         preds = self._predict(_img)
         preds = non_max_suppression(preds, conf_thres=0.25, iou_thres=0.45, classes=[0], max_det=300)
 
-        results_bboxs = []
-        results_scores = []
+        results_skeleton = []
         for pred in preds:
             # scale the prediction back to the input image size
             pred[:, :4] = scale_boxes(img_size, pred[:, :4], img0_size).round()
-            results_bboxs.extend(pred[:, :4].tolist())
-            results_scores.extend(pred[:, 4].tolist())
+            for det in pred:
+                skeleton = Skeleton(bbox_bltr=det[:4].tolist(),
+                                    score=det[4].tolist())
 
-        return {"bboxes": results_bboxs, "scores": results_scores}
+                results_skeleton.append(skeleton)
+
+        return results_skeleton
 
     @torch.no_grad()
     def extract_skeletons(self, img: Union[Path, np.ndarray]) -> Dict[str, List]:
@@ -156,9 +159,7 @@ class Yolov8:
         preds = self._predict(_img)
         preds = non_max_suppression(preds, conf_thres=0.25, iou_thres=0.7, classes=None, max_det=1000, nc=1)
 
-        results_bboxs = []
-        results_scores = []
-        results_keypoints = []
+        results_skeleton = []
         for pred in preds:
             if pred == []:
                 continue
@@ -166,11 +167,13 @@ class Yolov8:
             pred[:, :4] = scale_boxes(img_size, pred[:, :4], img0_size).round()
             pred[:, 6:] = scale_coords(img_size, pred[:, 6:], img0_size).round()
 
-            results_bboxs.extend(pred[:, :4].tolist())
-            results_scores.append(pred[:, 4].tolist())
-            results_keypoints.extend(pred[:, 6:].tolist())
+            for det in pred:
+                skeleton = Skeleton(bbox_bltr=det[:4].tolist(),
+                                    score=det[4].tolist(),
+                                    keypoints=det[6:].tolist())
+                results_skeleton.append(skeleton)
 
-        return {"bboxes": results_bboxs, "scores": results_scores, "keypoints": results_keypoints}
+        return results_skeleton
 
 
 def correct_img_size(img: np.ndarray, stride: int) -> np.ndarray:
